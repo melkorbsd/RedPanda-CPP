@@ -82,7 +82,7 @@ Editor* EditorManager::newEditor(const QString& filename, const QByteArray& enco
     e->setCodeSnippetsManager(pMainWindow->codeSnippetManager());
     e->setFileSystemWatcher(pMainWindow->fileSystemWatcher());
     e->applySettings();
-    e->setEncodingOption(encoding);
+    e->setEditorEncoding(encoding);
     e->setFilename(filename);
     if (!newFile) {
         e->loadFile(filename);
@@ -134,10 +134,12 @@ Editor* EditorManager::newEditor(const QString& filename, const QByteArray& enco
     connect(e, &Editor::lineMoved, this, &EditorManager::onEditorLineMoved);
     connect(e, &Editor::statusChanged, this, &EditorManager::onEditorStatusChanged);
     connect(e, &Editor::fontSizeChangedByWheel, this, &EditorManager::onEditorFontSizeChangedByWheel);
+    connect(e, &Editor::fileEncodingChanged, this, &EditorManager::onEditorFileEncodingChanged);
 
     connect(e, &Editor::syntaxCheckRequested, pMainWindow, &MainWindow::checkSyntaxInBack);
     connect(e, &Editor::parseTodoRequested, pMainWindow->todoParser().get(), &TodoParser::parseFile);
-    connect(e, &Editor::updateEncodingInfoRequested, pMainWindow, &MainWindow::updateForEncodingInfo);
+    connect(e, &Editor::fileEncodingChanged, pMainWindow, &MainWindow::updateForEncodingInfo);
+    connect(e, &Editor::editorEncodingChanged, pMainWindow, &MainWindow::updateForEncodingInfo);
     connect(e, &Editor::focusInOccured, pMainWindow, &MainWindow::refreshInfosForEditor);
     connect(e, &Editor::closeOccured, pMainWindow, &MainWindow::removeInfosForEditor);
     connect(e, &Editor::hideOccured, pMainWindow, &MainWindow::removeInfosForEditor);
@@ -399,6 +401,16 @@ void EditorManager::onEditorFontSizeChangedByWheel(int newSize)
     pSettings->editor().setFontSize(newSize);
     pSettings->editor().save();
     pMainWindow->updateEditorSettings();
+}
+
+void EditorManager::onEditorFileEncodingChanged(Editor *e)
+{
+    if (pMainWindow->project()) {
+        PProjectUnit unit = pMainWindow->project()->findUnit(e);
+        if (unit) {
+            unit->setRealEncoding(e->fileEncoding());
+        }
+    }
 }
 
 

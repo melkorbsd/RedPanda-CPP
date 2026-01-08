@@ -86,7 +86,7 @@ Editor::Editor(QWidget *parent):
     mCtrlClicking{false},
     mFileType{FileType::None}
 {
-    mEncodingOption = ENCODING_UTF8;
+    mEditorEncoding = ENCODING_UTF8;
     mFileEncoding = ENCODING_ASCII;
     mProject = nullptr;
     mIsNew = true;
@@ -211,32 +211,28 @@ void Editor::loadFile(QString filename) {
 
 void Editor::saveFile(QString filename) {
     QFile file(filename);
-    QByteArray encoding = mEncodingOption;
+    QByteArray encoding = mEditorEncoding;
     this->document()->saveToFile(file,encoding,
                               mEditorSettings->defaultEncoding(),
                               mFileEncoding);
-    if (mProject) {
-        PProjectUnit unit = mProject->findUnit(this);
-        if (unit) {
-            unit->setRealEncoding(mFileEncoding);
-        }
-    }
-    if (isVisible())
-        emit updateEncodingInfoRequested(this);
+    emit fileEncodingChanged(this);
 }
 
 void Editor::convertToEncoding(const QByteArray &encoding)
 {
-    mEncodingOption = encoding;
+    if (mEditorEncoding == encoding)
+        return;
+    mEditorEncoding = encoding;
     setModified(true);
     save();
     if (mProject) {
         PProjectUnit unit = mProject->findUnit(this);
         if (unit) {
-            unit->setEncoding(mEncodingOption);
+            unit->setEncoding(mEditorEncoding);
             unit->setRealEncoding(mFileEncoding);
         }
     }
+    emit editorEncodingChanged(this);
 }
 
 bool Editor::save(bool force, bool doReparse) {
@@ -446,18 +442,19 @@ void Editor::setFilename(const QString &newName)
 }
 
 const QByteArray& Editor::encodingOption() const noexcept{
-    return mEncodingOption;
+    return mEditorEncoding;
 }
 
-void Editor::setEncodingOption(const QByteArray& encoding) noexcept{
+void Editor::setEditorEncoding(const QByteArray& encoding) noexcept{
     if (encoding.isEmpty())
         return;
     QByteArray newEncoding=encoding;
     if (mProject && encoding==ENCODING_PROJECT)
         newEncoding=mProject->options().encoding;
-    if (mEncodingOption == newEncoding)
+    if (mEditorEncoding == newEncoding)
         return;
-    mEncodingOption = newEncoding;
+    mEditorEncoding = newEncoding;
+    emit editorEncodingChanged(this);
     if (!isNew()) {
         if (modified()) {
             if (QMessageBox::warning(this,tr("Confirm Reload File"),
@@ -473,13 +470,12 @@ void Editor::setEncodingOption(const QByteArray& encoding) noexcept{
                                   tr("Error Load File"),
                                   e.reason());
         }
-    } else
-        emit updateEncodingInfoRequested(this);
+    }
     resolveAutoDetectEncodingOption();
     if (mProject) {
         PProjectUnit unit = mProject->findUnit(this);
         if (unit) {
-            unit->setEncoding(mEncodingOption);
+            unit->setEncoding(mEditorEncoding);
             unit->setRealEncoding(mFileEncoding);
         }
     }
@@ -1970,26 +1966,20 @@ bool Editor::functionTooltipVisible() const
 
 void Editor::loadContent(const QString& filename)
 {
-    loadFromFile(filename,mEncodingOption,mFileEncoding);
+    loadFromFile(filename,mEditorEncoding,mFileEncoding);
     applyColorScheme(mEditorSettings->colorScheme());
-    if (mProject) {
-        PProjectUnit unit = mProject->findUnit(this);
-        if (unit) {
-            unit->setRealEncoding(mFileEncoding);
-        }
-    }
     mIsNew = false;
-    emit updateEncodingInfoRequested(this);
+    emit fileEncodingChanged(this);
     saveAutoBackup();
 }
 
 void Editor::resolveAutoDetectEncodingOption()
 {
-    if (mEncodingOption==ENCODING_AUTO_DETECT) {
+    if (mEditorEncoding==ENCODING_AUTO_DETECT) {
         if (mFileEncoding==ENCODING_ASCII)
-            mEncodingOption=mEditorSettings->defaultEncoding();
+            mEditorEncoding=mEditorSettings->defaultEncoding();
         else
-            mEncodingOption=mFileEncoding;
+            mEditorEncoding=mFileEncoding;
     }
 }
 
@@ -2010,7 +2000,7 @@ bool Editor::isBraceChar(QChar ch) const
 
 bool Editor::shouldOpenInReadonly()
 {
-    if (mProject && mProject->findUnit(mFilename))
+    if (inProject())
         return false;
     return mEditorSettings->readOnlySytemHeader()
                 && mParser && (mParser->isSystemHeaderFile(mFilename) || mParser->isProjectHeaderFile(mFilename));
