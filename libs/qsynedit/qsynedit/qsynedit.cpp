@@ -1289,6 +1289,18 @@ CharPos QSynEdit::nextWordEnd(const CharPos &pos) const
     return (p.isValid())?p:fileEnd();
 }
 
+CharPos QSynEdit::lineBegin(int line) const
+{
+    Q_ASSERT(line>=0 && line<mDocument->count());
+    return CharPos{0, line};
+}
+
+CharPos QSynEdit::lineEnd(int line) const
+{
+    Q_ASSERT(line>=0 && line<mDocument->count());
+    return CharPos{(int)mDocument->getLine(line).length(), line};
+}
+
 CharPos QSynEdit::fileEnd() const
 {
     int line = mDocument->count()-1;
@@ -2032,7 +2044,7 @@ void QSynEdit::doDeleteCurrentLine()
     if (isLastLine) {
         setCaretXY(fileEnd());
     } else
-        setCaretXY(CharPos{0, oldCaretY});
+        setCaretXY(lineBegin(oldCaretY));
 }
 
 void QSynEdit::doDuplicate()
@@ -2683,30 +2695,33 @@ void QSynEdit::doInputStr(const QString& s)
             QChar lastCh{0};
             if (!selAvail()) {
                 PUndoItem undoItem = mUndoList->peekItem();
-                if (undoItem && undoItem->changeReason()==ChangeReason::Input
-                        && undoItem->changeEndPos().line == mCaretY
+                if (undoItem && undoItem->changeReason()==ChangeReason::Input) {
+                    if (undoItem->changeEndPos().line == mCaretY
                         && undoItem->changeEndPos().ch == mCaretX
                         && undoItem->changeStartPos().line == mCaretY
                         && undoItem->changeStartPos().ch == mCaretX-1) {
-                    QString s = mDocument->getLine(mCaretY);
-                    int i=mCaretX-1;
-                    if (i>=0 && i<s.length())
-                        lastCh=s[i];
+                        QString s = mDocument->getLine(mCaretY);
+                        int i=mCaretX-1;
+                        if (i>=0 && i<s.length())
+                            lastCh=s[i];
+                    } else {
+                        addGroupUndoBreak();
+                    }
                 }
             }
             if (isIdentChar(inputStr[0])) {
-                if (!isIdentChar(lastCh)) {
+                if (lastCh!=0 && !isIdentChar(lastCh)) {
                     addGroupUndoBreak();
                 }
                 internalInputStr(inputStr);
             } else if (isSpaceChar(inputStr[0])) {
                 // break group undo chain
-                if (!isSpaceChar(lastCh)) {
+                if (lastCh!=0 && !isSpaceChar(lastCh)) {
                     addGroupUndoBreak();
                 }
                 internalInputStr(inputStr);
             } else {
-                if (isSpaceChar(lastCh) || isIdentChar(lastCh)) {
+                if ((lastCh!=0 && isSpaceChar(lastCh)) || isIdentChar(lastCh)) {
                     addGroupUndoBreak();
                 }
                 int oldCaretX=mCaretX;

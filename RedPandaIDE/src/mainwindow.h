@@ -41,6 +41,7 @@
 #include "customfileiconprovider.h"
 #include "problems/competitivecompenionhandler.h"
 #include "utils/parsemacros.h"
+#include "utils/file.h"
 
 
 QT_BEGIN_NAMESPACE
@@ -73,6 +74,8 @@ struct ProjectModelNode;
 class ProjectUnit;
 class ColorSchemeItem;
 class VisitHistoryManager;
+class ColorManager;
+class IconsManager;
 
 #define DPI_CHANGED_EVENT ((QEvent::Type)(QEvent::User+1))
 
@@ -343,6 +346,7 @@ private:
 
     void updateProblemSetName();
     void saveProblemSet(const QString& filePath);
+    void setEditorEncoding(Editor *e, const QByteArray &encoding);
 
 private slots:
     void setupSlotsForProject();
@@ -931,6 +935,9 @@ private:
 
     std::shared_ptr<VisitHistoryManager> mVisitHistoryManager;
 
+    std::unique_ptr<ColorManager> mColorManager;
+    std::unique_ptr<IconsManager> mIconsManager;
+    std::unique_ptr<CustomFileIconProvider> mFileSystemModelIconProvider;
     TodoModel *mTodoModel;
     SearchResultModel *mSearchResultModel;
     BookmarkModel *mBookmarkModel;
@@ -944,7 +951,6 @@ private:
     PTodoParser mTodoParser;
     ToolsManager *mToolsManager;
     CustomFileSystemModel *mFileSystemModel;
-    CustomFileIconProvider mFileSystemModelIconProvider;
     OJProblemSetModel *mOJProblemSetModel;
     OJProblemModel *mOJProblemModel;
     int mOJProblemSetNameCounter;
@@ -1082,6 +1088,8 @@ public:
 
     OJProblemSetModel *getOJProblemSetModel() const;
     OJProblemModel *getOJProblemModel() const;
+    ColorManager* colorManager() const;
+    IconsManager* iconsManager() const;
 };
 
 extern MainWindow* pMainWindow;

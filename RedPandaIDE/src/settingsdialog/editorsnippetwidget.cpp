@@ -22,12 +22,15 @@
 #include "../iconsmanager.h"
 #include "../syntaxermanager.h"
 #include "../settings.h"
+#include "../utils/file.h"
+
 
 #include <QItemSelectionModel>
 
-EditorSnippetWidget::EditorSnippetWidget(const QString& name, const QString& group,
+EditorSnippetWidget::EditorSnippetWidget(ColorManager *colorManager,const QString& name, const QString& group,
+                                         IconsManager *iconsManager,
                                          QWidget *parent) :
-    SettingsWidget(name,group,parent),
+    SettingsWidget(name,group,iconsManager,parent),
     ui(new Ui::EditorSnippetWidget)
 {
     mUpdatingCode = false;
@@ -61,12 +64,16 @@ EditorSnippetWidget::EditorSnippetWidget(const QString& name, const QString& gro
         }
     });
     ui->editCode->setEditorSettings(&pSettings->editor());
+    ui->editCode->setColorManager(colorManager);
     ui->editCode->applySettings();
     ui->editCppFileTemplate->setEditorSettings(&pSettings->editor());
+    ui->editCppFileTemplate->setColorManager(colorManager);
     ui->editCppFileTemplate->applySettings();
     ui->editCFileTemplate->setEditorSettings(&pSettings->editor());
+    ui->editCFileTemplate->setColorManager(colorManager);
     ui->editCFileTemplate->applySettings();
     ui->editGASFileTemplate->setEditorSettings(&pSettings->editor());
+    ui->editGASFileTemplate->setColorManager(colorManager);
     ui->editGASFileTemplate->applySettings();
     connect(ui->editCppFileTemplate,&Editor::changed,
             this, &SettingsWidget::setSettingsChanged);
@@ -116,8 +123,8 @@ void EditorSnippetWidget::on_btnAdd_clicked()
 
 void EditorSnippetWidget::updateIcons(const QSize &/*size*/)
 {
-    pIconsManager->setIcon(ui->btnAdd,IconsManager::ACTION_MISC_ADD);
-    pIconsManager->setIcon(ui->btnRemove,IconsManager::ACTION_MISC_REMOVE);
+    iconsManager()->setIcon(ui->btnAdd,IconsManager::ACTION_MISC_ADD);
+    iconsManager()->setIcon(ui->btnRemove,IconsManager::ACTION_MISC_REMOVE);
 }
 
 

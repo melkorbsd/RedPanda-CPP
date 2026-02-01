@@ -22,7 +22,6 @@
 #include "../symbolusagemanager.h"
 #include "../colorscheme.h"
 #include "../iconsmanager.h"
-#include "../settings.h"
 
 #include <QKeyEvent>
 #include <QVBoxLayout>
@@ -30,15 +29,15 @@
 #include <QApplication>
 #include <QPainter>
 
-CodeCompletionPopup::CodeCompletionPopup(QWidget *parent) :
+CodeCompletionPopup::CodeCompletionPopup(ColorManager *colorManager,IconsManager *iconsManager,QWidget *parent) :
     QWidget(parent),
     mListView(nullptr),
     mMutex()
 {
     setWindowFlags(Qt::Popup);
-
+    mColorManager = colorManager;
     mListView = new CodeCompletionListView(this);
-    mModel=new CodeCompletionListModel(&mCompletionStatementList);
+    mModel=new CodeCompletionListModel(&mCompletionStatementList,iconsManager);
     mDelegate = new CodeCompletionListItemDelegate(mModel,this);
     QItemSelectionModel *m=mListView->selectionModel();
     mListView->setModel(mModel);
@@ -134,7 +133,7 @@ void CodeCompletionPopup::prepareSearch(
     setCursor(oldCursor);
 }
 
-bool CodeCompletionPopup::search(const QString &memberPhrase, bool autoHideOnSingleResult)
+bool CodeCompletionPopup::search(const QString &memberPhrase, bool autoHideOnSingleResult, const QString& schemeName)
 {
     QMutexLocker locker(&mMutex);
 
@@ -161,18 +160,18 @@ bool CodeCompletionPopup::search(const QString &memberPhrase, bool autoHideOnSin
     setCursor(oldCursor);
 
     if (!mCompletionStatementList.isEmpty()) {
-        QString schemaName = pSettings->editor().colorScheme();
-        PColorSchemeItem item = pColorManager->getItem(schemaName, COLOR_SCHEME_ACTIVE_LINE);
+        Q_ASSERT(!schemeName.isEmpty());
+        PColorSchemeItem item = mColorManager->getItem(schemeName, COLOR_SCHEME_ACTIVE_LINE);
         if (item && item->background().isValid())
             mDelegate->setCurrentSelectionColor(item->background());
         else
             mDelegate->setCurrentSelectionColor(palette().highlight().color());
-        item = pColorManager->getItem(schemaName, COLOR_SCHEME_TEXT);
+        item = mColorManager->getItem(schemeName, COLOR_SCHEME_TEXT);
         if (item && item->foreground().isValid())
             mDelegate->setNormalColor(item->foreground());
         else
             mDelegate->setNormalColor(palette().color(QPalette::Text));
-        item = pColorManager->getItem(schemaName, SYNS_AttrReserveWord_Type);
+        item = mColorManager->getItem(schemeName, SYNS_AttrReserveWord_Type);
         if (item && item->foreground().isValid())
             mDelegate->setMatchedColor(item->foreground());
         else
@@ -1343,11 +1342,11 @@ bool CodeCompletionPopup::event(QEvent *event)
     return result;
 }
 
-CodeCompletionListModel::CodeCompletionListModel(const StatementList *statements, QObject *parent):
+CodeCompletionListModel::CodeCompletionListModel(const StatementList *statements, IconsManager *iconsManager,QObject *parent):
     QAbstractListModel(parent),
     mStatements(statements)
 {
-
+    mIconsManager = iconsManager;
 }
 
 int CodeCompletionListModel::rowCount(const QModelIndex &) const
@@ -1387,7 +1386,7 @@ QPixmap CodeCompletionListModel::statementIcon(const QModelIndex &index, int siz
     if (index.row()>=mStatements->count())
         return QPixmap();
     PStatement statement = mStatements->at(index.row());
-    return pIconsManager->getPixmapForStatement(statement, size);
+    return mIconsManager->getPixmapForStatement(statement, size);
 }
 
 void CodeCompletionListModel::notifyUpdated()

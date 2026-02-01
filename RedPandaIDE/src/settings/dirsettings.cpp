@@ -16,6 +16,7 @@
  */
 #include "dirsettings.h"
 #include "../utils.h"
+#include "../utils/os.h"
 #include <QApplication>
 #include <QDir>
 #include <QFileInfo>
@@ -28,12 +29,12 @@ DirSettings::DirSettings(SettingsPersistor *persistor):
 {
 }
 
-QString DirSettings::appDir() const
+QString DirSettings::appDir()
 {
     return QApplication::instance()->applicationDirPath();
 }
 
-QString DirSettings::appResourceDir() const
+QString DirSettings::appResourceDir()
 {
 #ifdef Q_OS_WIN
     return appDir();
@@ -48,7 +49,7 @@ QString DirSettings::appResourceDir() const
 }
 
 
-QString DirSettings::appLibexecDir() const
+QString DirSettings::appLibexecDir()
 {
 #ifdef Q_OS_WIN
     return appDir();
@@ -65,7 +66,7 @@ QString DirSettings::projectDir() const
     return mProjectDir;
 }
 
-QString DirSettings::data(DirSettings::DataType dataType) const
+QString DirSettings::data(DirSettings::DataType dataType)
 {
     QString dataDir = getFilePath(appDir(), +"data");
     switch (dataType) {
@@ -103,7 +104,7 @@ QString DirSettings::config(DirSettings::DataType dataType) const
     return "";
 }
 
-QString DirSettings::executable() const
+QString DirSettings::executable()
 {
     QString s = QApplication::instance()->applicationFilePath();
     s.replace("/",QDir::separator());

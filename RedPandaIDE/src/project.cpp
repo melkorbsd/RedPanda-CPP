@@ -21,7 +21,7 @@
 #include "utils.h"
 #include "systemconsts.h"
 #include "parser/cppparser.h"
-#include "utils.h"
+#include "utils/file.h"
 #include "qt_utils/charsetinfo.h"
 #include "projecttemplate.h"
 #include "systemconsts.h"
@@ -43,20 +43,22 @@
 #include <QMimeData>
 #include "settings.h"
 #include "vcs/gitrepository.h"
-
+#include "utils/parser.h"
 Project::Project(const QString &filename, const QString &name,
                  EditorManager* editorList,
+                 IconsManager * iconsManager,
                  QFileSystemWatcher* fileSystemWatcher,
                  QObject *parent) :
     QObject(parent),
     mName(name),
     mModified(false),
-    mModel(this),
     mEditorManager(editorList),
     mFileSystemWatcher(fileSystemWatcher)
 {
+    mModel = new ProjectModel(iconsManager, this);
     mFilename = QFileInfo(filename).absoluteFilePath();
     mParser = std::make_shared<CppParser>();
+    mParser->setSharedByFiles(true);
     mParser->setOnGetFileStream(
                 std::bind(
                     &EditorManager::getContentFromOpenedEditor,mEditorManager,
@@ -64,11 +66,14 @@ Project::Project(const QString &filename, const QString &name,
     mFileSystemWatcher->addPath(directory());
 }
 
-std::shared_ptr<Project> Project::load(const QString &filename, EditorManager *editorList, QFileSystemWatcher *fileSystemWatcher, QObject *parent)
+std::shared_ptr<Project> Project::load(const QString &filename, EditorManager *editorList,
+                                       IconsManager * iconsManager,
+                                       QFileSystemWatcher *fileSystemWatcher, QObject *parent)
 {
     std::shared_ptr<Project> project=std::make_shared<Project>(filename,
                                                                "",
                                                                editorList,
+                                                               iconsManager,
                                                                fileSystemWatcher,
                                                                parent);
     project->open();
@@ -79,13 +84,15 @@ std::shared_ptr<Project> Project::load(const QString &filename, EditorManager *e
 
 std::shared_ptr<Project> Project::create(
         const QString &filename, const QString &name,
-        EditorManager *editorList, QFileSystemWatcher *fileSystemWatcher,
+        EditorManager *editorList,
+        IconsManager * iconsManager, QFileSystemWatcher *fileSystemWatcher,
         const std::shared_ptr<ProjectTemplate> pTemplate,
         bool useCpp,  QObject *parent)
 {
     std::shared_ptr<Project> project=std::make_shared<Project>(filename,
                                                                name,
                                                                editorList,
+                                                               iconsManager,
                                                                fileSystemWatcher,
                                                                parent);
     SimpleIni ini;
@@ -109,7 +116,7 @@ Project::~Project()
     foreach (const PProjectUnit& unit, mUnits) {
         Editor * editor = unitEditor(unit);
         if (editor) {
-            editor->setProject(nullptr);
+            editor->setInProject(false,false);
             if (fileExists(directory()))
                 mEditorManager->forceCloseEditor(editor);
         }
@@ -208,9 +215,9 @@ bool Project::modifiedSince(const QDateTime &time)
 
 void Project::open()
 {
-    mModel.beginUpdate();
+    mModel->beginUpdate();
     auto action = finally([this]{
-        mModel.endUpdate();
+        mModel->endUpdate();
     });
 //    QFile fileInfo(mFilename);
     SimpleIni ini;
@@ -309,9 +316,9 @@ PProjectModelNode Project::makeNewFolderNode(
     node->isUnit=false;
     node->priority = priority;
     node->folderNodeType = nodeType;
-    QModelIndex parentIndex=mModel.getNodeIndex(newParent.get());
+    QModelIndex parentIndex=mModel->getNodeIndex(newParent.get());
     newParent->children.append(node);
-    mModel.insertRow(newParent->children.count()-1,parentIndex);
+    mModel->insertRow(newParent->children.count()-1,parentIndex);
     return node;
 }
 
@@ -332,8 +339,8 @@ PProjectModelNode Project::makeNewFileNode(PProjectUnit unit,int priority, PProj
     node->folderNodeType = ProjectModelNodeType::File;
 
     newParent->children.append(node);
-    QModelIndex parentIndex=mModel.getNodeIndex(newParent.get());
-    mModel.insertRow(newParent->children.count()-1,parentIndex);
+    QModelIndex parentIndex=mModel->getNodeIndex(newParent.get());
+    mModel->insertRow(newParent->children.count()-1,parentIndex);
     return node;
 }
 
@@ -382,7 +389,7 @@ Editor* Project::openUnit(PProjectUnit& unit, bool forceOpen) {
 
         Editor * editor = mEditorManager->getOpenedEditor(unit->fileName());
         if (editor) {//already opened in the editors
-            editor->setProject(this);
+            associateEditor(editor);
             mEditorManager->activeEditor(editor,true);
             return editor;
         }
@@ -391,14 +398,10 @@ Editor* Project::openUnit(PProjectUnit& unit, bool forceOpen) {
         if (encoding==ENCODING_PROJECT)
             encoding=options().encoding;
 
-        editor = mEditorManager->newEditor(unit->fileName(), encoding, FileType::None, QString(), this, false);
-        if (editor) {
-            //editor->setProject(this);
-            //unit->setEncoding(encoding);
-            loadUnitLayout(editor);
-            mEditorManager->activeEditor(editor,true);
-            return editor;
-        }
+        editor = mEditorManager->newEditor(unit->fileName(), encoding, FileType::None, QString(), true, false);
+        loadUnitLayout(editor);
+        mEditorManager->activeEditor(editor,true);
+        return editor;
     }
     return nullptr;
 }
@@ -412,7 +415,7 @@ Editor *Project::openUnit(PProjectUnit &unit, const PProjectEditorLayout &layout
 
         Editor * editor = mEditorManager->getOpenedEditor(unit->fileName());
         if (editor) {//already opened in the editors
-            editor->setProject(this);
+            associateEditor(editor);
             mEditorManager->activeEditor(editor,true);
             return editor;
         }
@@ -420,7 +423,7 @@ Editor *Project::openUnit(PProjectUnit &unit, const PProjectEditorLayout &layout
         encoding = unit->encoding();
         if (encoding==ENCODING_PROJECT)
             encoding=options().encoding;
-        editor = mEditorManager->newEditor(unit->fileName(), encoding, FileType::None, QString(), this, false);
+        editor = mEditorManager->newEditor(unit->fileName(), encoding, FileType::None, QString(), true, false);
         if (editor) {
             //editor->setInProject(true);
             editor->setCaretY(layout->caretY);
@@ -468,7 +471,7 @@ QStringList Project::unitFiles()
 
 void Project::rebuildNodes()
 {
-    mModel.beginUpdate();
+    mModel->beginUpdate();
     // Delete everything
     mRootNode->children.clear();
     mCustomFolderNodes.clear();
@@ -506,7 +509,7 @@ void Project::rebuildNodes()
         break;
     }
 
-    mModel.endUpdate();
+    mModel->endUpdate();
 }
 
 bool Project::removeUnit(PProjectUnit& unit, bool doClose , bool removeFile)
@@ -530,7 +533,7 @@ bool Project::internalRemoveUnit(PProjectUnit& unit, bool doClose , bool removeF
     if (doClose) {
         Editor* editor = unitEditor(unit);
         if (editor) {
-            editor->setProject(nullptr);
+            editor->setInProject(false,false);
             mEditorManager->closeEditor(editor);
         }
     }
@@ -554,9 +557,9 @@ bool Project::internalRemoveUnit(PProjectUnit& unit, bool doClose , bool removeF
         return true;
     }
 
-    QModelIndex parentIndex = mModel.getNodeIndex(parentNode.get());
+    QModelIndex parentIndex = mModel->getNodeIndex(parentNode.get());
 
-    mModel.removeRow(row,parentIndex);
+    mModel->removeRow(row,parentIndex);
     mUnits.remove(unit->fileName());
 
     //remove empty parent node
@@ -568,8 +571,8 @@ bool Project::internalRemoveUnit(PProjectUnit& unit, bool doClose , bool removeF
         row = parentNode->children.indexOf(currentNode);
         if (row<0)
             break;
-        parentIndex = mModel.getNodeIndex(parentNode.get());
-        mModel.removeRow(row,parentIndex);
+        parentIndex = mModel->getNodeIndex(parentNode.get());
+        mModel->removeRow(row,parentIndex);
         currentNode = parentNode;
     }
 
@@ -579,9 +582,9 @@ bool Project::internalRemoveUnit(PProjectUnit& unit, bool doClose , bool removeF
 
 bool Project::removeFolder(PProjectModelNode node)
 {
-    mModel.beginUpdate();
+    mModel->beginUpdate();
     auto action = finally([this]{
-        mModel.endUpdate();
+        mModel->endUpdate();
     });
     // Sanity check
     if (!node)
@@ -704,15 +707,13 @@ void Project::renameUnit(PProjectUnit& unit, const QString &newFileName)
 
     if (mParser)
         mParser->invalidateFile(unit->fileName());
-    Editor * editor=unitEditor(unit);
+    Editor *editor=unitEditor(unit);
+    copyFile(unit->fileName(),newFileName,true);
     if (editor) {
-        //prevent recurse
-        editor->saveAs(newFileName,true);
-    } else {
-        copyFile(unit->fileName(),newFileName,true);
+        editor->rename(newFileName);
     }
     if (mParser)
-        parseFileNonBlocking(mParser,newFileName,true, editor->contextFile());
+        CppParser::parseFileNonBlocking(mParser,newFileName,true, editor->contextFile());
 
     internalRemoveUnit(unit,false,true);
 
@@ -803,11 +804,16 @@ PProjectUnit Project::findUnit(const Editor *editor) const
     return findUnit(editor->filename());
 }
 
+bool Project::inProject(const QString &filename) const
+{
+    return mUnits.contains(filename);
+}
+
 bool Project::inProject(const Editor *editor) const
 {
     if (!editor)
         return false;
-    return mUnits.contains(editor->filename());
+    return inProject(editor->filename());
 }
 
 void Project::associateEditor(Editor *editor)
@@ -820,30 +826,16 @@ void Project::associateEditorToUnit(Editor *editor, PProjectUnit unit)
 {
     if (!unit) {
         if (editor)
-            editor->setProject(nullptr);
+            editor->setInProject(false);
         return;
     }
     if (editor) {
-        Editor * e= unitEditor(unit);
-        if (e) {
-            if (editor==e)
-                return;
-            e->setProject(nullptr);
-            e->close();
-        }
-        editor->setProject(this);
-//        if (editor->encodingOption()==ENCODING_AUTO_DETECT) {
-//            if (editor->fileEncoding()==ENCODING_ASCII) {
-//                editor->setEncodingOption(mOptions.encoding);
-//            } else {
-//                editor->setEncodingOption(editor->fileEncoding());
-//            }
-//        }
+        editor->setInProject(true);
         if (unit->encoding()==ENCODING_PROJECT) {
-            if (editor->encodingOption()!=mOptions.encoding)
-                unit->setEncoding(editor->encodingOption());
-        } else if (editor->encodingOption()!=unit->encoding()) {
-            unit->setEncoding(editor->encodingOption());
+            if (editor->editorEncoding()!=mOptions.encoding)
+                unit->setEncoding(editor->editorEncoding());
+        } else if (editor->editorEncoding()!=unit->encoding()) {
+            unit->setEncoding(editor->editorEncoding());
         }
         unit->setRealEncoding(editor->fileEncoding());
     }
@@ -939,7 +931,7 @@ bool Project::assignTemplate(const std::shared_ptr<ProjectTemplate> aTemplate, b
         return false;
     }
 
-    mModel.beginUpdate();
+    mModel->beginUpdate();
     mRootNode = makeProjectNode();
     rebuildNodes();
     mOptions = aTemplate->options();
@@ -993,7 +985,7 @@ bool Project::assignTemplate(const std::shared_ptr<ProjectTemplate> aTemplate, b
                                 unit->encoding()==ENCODING_PROJECT?options().encoding:unit->encoding(),
                                 FileType::None,
                                 QString(),
-                                this,
+                                true,
                                 false);
                     lastNewEditor = editor;
                 }
@@ -1012,7 +1004,7 @@ bool Project::assignTemplate(const std::shared_ptr<ProjectTemplate> aTemplate, b
                             unit->encoding()==ENCODING_PROJECT?options().encoding:unit->encoding(),
                             FileType::None,
                             QString(),
-                            this,
+                            true,
                             true);
 
                 if (templateUnit->overwrite || !fileExists(unit->fileName()) ) {
@@ -1036,7 +1028,7 @@ bool Project::assignTemplate(const std::shared_ptr<ProjectTemplate> aTemplate, b
         }
         mEditorManager->activeEditor(lastNewEditor,true);
     }
-    mModel.endUpdate();
+    mModel->endUpdate();
     return true;
 }
 
@@ -1163,7 +1155,7 @@ void Project::setEncoding(const QByteArray &encoding)
                 continue;
             Editor * e=unitEditor(unit);
             if (e) {
-                e->setEditorEncoding(ENCODING_PROJECT);
+                e->setEditorEncoding(mOptions.encoding);
                 unit->setEncoding(ENCODING_PROJECT);
             }
         }
@@ -1266,9 +1258,9 @@ PProjectModelNode Project::addFolder(PProjectModelNode parentFolder,const QStrin
         fullPath = path + '/' +s;
     }
     if (mFolders.indexOf(fullPath)<0) {
-        mModel.beginUpdate();
+        mModel->beginUpdate();
         auto action = finally([this]{
-            mModel.endUpdate();
+            mModel->endUpdate();
         });
         mFolders.append(fullPath);
         PProjectModelNode node = makeNewFolderNode(s,parentFolder);
@@ -1312,9 +1304,6 @@ PProjectUnit Project::internalAddUnit(const QString &inFileName, PProjectModelNo
     Editor * e= unitEditor(newUnit);
     if (e) {
         associateEditorToUnit(e,newUnit);
-//        newUnit->setEncoding(e->encodingOption());
-//        newUnit->setRealEncoding(e->fileEncoding());
-//        e->setProject(this);
     } else {
         newUnit->setEncoding(ENCODING_PROJECT);
     }
@@ -2315,7 +2304,7 @@ ProjectOptions &Project::options()
 
 ProjectModel *Project::model()
 {
-    return &mModel;
+    return mModel;
 }
 
 const PProjectModelNode &Project::rootNode() const
@@ -2349,7 +2338,7 @@ ProjectUnit::ProjectUnit(Project* parent)
 //    mFileMissing = false;
     mPriority=0;
     mNew = true;
-    mEditorEncoding=ENCODING_PROJECT;
+    mUnitEncoding=ENCODING_PROJECT;
     mFileEncoding="";
 }
 
@@ -2465,17 +2454,17 @@ void ProjectUnit::setPriority(int newPriority)
 
 const QByteArray &ProjectUnit::encoding() const
 {
-    return mEditorEncoding;
+    return mUnitEncoding;
 }
 
 void ProjectUnit::setEncoding(const QByteArray &newEncoding)
 {
-    if (mEditorEncoding != newEncoding) {
+    if (mUnitEncoding != newEncoding) {
         Editor * editor=mParent->unitEditor(this);
         if (editor) {
             editor->setEditorEncoding(newEncoding);
         }
-        mEditorEncoding = newEncoding;
+        mUnitEncoding = newEncoding;
     }
 }
 
@@ -2499,18 +2488,15 @@ void ProjectUnit::setNode(const PProjectModelNode &newNode)
 //    mFileMissing = newDontSave;
 //}
 
-ProjectModel::ProjectModel(Project *project, QObject *parent):
-    QAbstractItemModel(parent),
+ProjectModel::ProjectModel(IconsManager * iconsManager, Project *project):
+    QAbstractItemModel(project),
     mProject(project)
 {
     mUpdateCount = 0;
+    Q_ASSERT(iconsManager!=nullptr);
     //delete in the destructor
-    mIconProvider = new CustomFileIconProvider();
-}
-
-ProjectModel::~ProjectModel()
-{
-    delete mIconProvider;
+    mIconsManager = iconsManager;
+    mIconProvider = std::make_unique<CustomFileIconProvider>(iconsManager);
 }
 
 void ProjectModel::beginUpdate()
@@ -2532,7 +2518,7 @@ void ProjectModel::endUpdate()
 
 CustomFileIconProvider *ProjectModel::iconProvider() const
 {
-    return mIconProvider;
+    return mIconProvider.get();
 }
 
 bool ProjectModel::insertRows(int row, int count, const QModelIndex &parent)
@@ -2632,18 +2618,18 @@ QVariant ProjectModel::data(const QModelIndex &index, int role) const
 #ifdef ENABLE_VCS
                 QString branch;
                 if (mIconProvider->VCSRepository()->hasRepository(branch))
-                    icon = pIconsManager->getIcon(IconsManager::FILESYSTEM_GIT);
+                    icon = mProject->iconsManager()->getIcon(IconsManager::FILESYSTEM_GIT);
 #endif
             } else {
                 switch(p->folderNodeType) {
                 case ProjectModelNodeType::DUMMY_HEADERS_FOLDER:
-                    icon = pIconsManager->getIcon(IconsManager::FILESYSTEM_HEADERS_FOLDER);
+                    icon = mIconsManager->getIcon(IconsManager::FILESYSTEM_HEADERS_FOLDER);
                     break;
                 case ProjectModelNodeType::DUMMY_SOURCES_FOLDER:
-                    icon = pIconsManager->getIcon(IconsManager::FILESYSTEM_SOURCES_FOLDER);
+                    icon = mIconsManager->getIcon(IconsManager::FILESYSTEM_SOURCES_FOLDER);
                     break;
                 default:
-                    icon = pIconsManager->getIcon(IconsManager::FILESYSTEM_FOLDER);
+                    icon = mIconsManager->getIcon(IconsManager::FILESYSTEM_FOLDER);
                 }
             }
             if (icon.isNull())

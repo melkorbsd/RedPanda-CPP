@@ -18,6 +18,7 @@
 #include "mainwindow.h"
 #include "editor.h"
 #include "editormanager.h"
+#include "utils/file.h"
 
 #include <QRegularExpression>
 
@@ -131,7 +132,7 @@ void TodoThread::doParseFile(const QString &filename)
 {
     emit parsingFile(filename);
     FileType fileType = getFileType(filename);
-    QSynedit::PSyntaxer syntaxer = syntaxerManager.getSyntaxer(fileType);
+    QSynedit::PSyntaxer syntaxer = SyntaxerManager::getSyntaxer(fileType);
     if (!syntaxer || syntaxer->language() == QSynedit::ProgrammingLanguage::Textfile)
         return;
     QStringList lines;

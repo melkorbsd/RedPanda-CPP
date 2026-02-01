@@ -22,6 +22,7 @@
 #include <QSet>
 #include <QSortFilterProxyModel>
 #include <memory>
+#include "customfileiconprovider.h"
 #include "projectoptions.h"
 #include "utils.h"
 
@@ -30,6 +31,7 @@ class Editor;
 class CppParser;
 class EditorManager;
 class QFileSystemWatcher;
+class IconsManager;
 
 enum ProjectModelNodeType {
     DUMMY_HEADERS_FOLDER,
@@ -118,7 +120,7 @@ private:
     QString mBuildCmd;
     bool mLink;
     int mPriority;
-    QByteArray mEditorEncoding;
+    QByteArray mUnitEncoding;
     QByteArray mFileEncoding;
     PProjectModelNode mNode;
 //    bool mFileMissing;
@@ -127,18 +129,17 @@ private:
 using PProjectUnit = std::shared_ptr<ProjectUnit>;
 
 class GitRepository;
-class CustomFileIconProvider;
 class ProjectModel : public QAbstractItemModel {
     Q_OBJECT
 public:
-    explicit ProjectModel(Project* project, QObject* parent=nullptr);
-    ~ProjectModel();
+    explicit ProjectModel(IconsManager * iconsManager, Project* project);
     void beginUpdate();
     void endUpdate();
 private:
     Project* mProject;
+    IconsManager *mIconsManager;
     int mUpdateCount;
-    CustomFileIconProvider* mIconProvider;
+    std::unique_ptr<CustomFileIconProvider> mIconProvider;
 
 
     // QAbstractItemModel interface
@@ -195,16 +196,19 @@ class Project : public QObject
 public:
     explicit Project(const QString& filename, const QString& name,
                      EditorManager* editorList,
+                     IconsManager * iconsManager,
                      QFileSystemWatcher* fileSystemWatcher,
                      QObject *parent = nullptr);
 
     static std::shared_ptr<Project> load(const QString& filename,
                                     EditorManager* editorList,
+                                         IconsManager * iconsManager,
                                     QFileSystemWatcher* fileSystemWatcher,
                                     QObject *parent = nullptr);
     static std::shared_ptr<Project> create(const QString& filename,
                                            const QString& name,
                                            EditorManager* editorList,
+                                           IconsManager * iconsManager,
                                            QFileSystemWatcher* fileSystemWatcher,
                                            const std::shared_ptr<ProjectTemplate> pTemplate,
                                            bool useCpp,
@@ -256,6 +260,7 @@ public:
 
     PProjectUnit findUnit(const QString& filename) const;
     PProjectUnit findUnit(const Editor* editor) const;
+    bool inProject(const QString& filename) const;
     bool inProject(const Editor* editor) const;
 
     void associateEditor(Editor* editor);
@@ -298,6 +303,7 @@ public:
 
     void renameFolderNode(PProjectModelNode node, const QString newName);
     void loadUnitLayout(Editor *e);
+
 signals:
     void unitRemoved(const QString& fileName);
     void unitAdded(const QString& fileName);
@@ -357,7 +363,7 @@ private:
     QHash<QString, PProjectModelNode> mFileSystemFolderNodes;
 
     QList<PProjectModelNode> mCustomFolderNodes;
-    ProjectModel mModel;
+    ProjectModel *mModel;
     EditorManager *mEditorManager;
     QFileSystemWatcher* mFileSystemWatcher;
 };

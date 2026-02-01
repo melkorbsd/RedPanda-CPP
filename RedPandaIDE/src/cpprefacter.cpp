@@ -25,6 +25,7 @@
 #include "editormanager.h"
 #include "syntaxermanager.h"
 #include "project.h"
+#include "utils/file.h"
 
 using QSynedit::CharPos;
 CppRefacter::CppRefacter(MainWindow * pMain, QObject *parent) : QObject(parent)
@@ -194,7 +195,7 @@ void CppRefacter::renameUndefinedLocalVariable(Editor *editor, const CharPos &po
                 editor->filename(),
                 newExpression,
                 pos.line);
-    QSynedit::PSyntaxer syntaxer = syntaxerManager.getSyntaxer(QSynedit::ProgrammingLanguage::CPP);
+    QSynedit::PSyntaxer syntaxer = SyntaxerManager::getSyntaxer(QSynedit::ProgrammingLanguage::CPP);
     int posY = scope->definitionLine;
     editor->clearSelection();
     editor->beginEditing();
@@ -253,7 +254,7 @@ void CppRefacter::doFindOccurenceInEditor(const PStatement &statement , Editor *
                 );
     PSearchResultTreeItem item = findOccurenceInFile(
                 editor->filename(),
-                editor->encodingOption(),
+                editor->editorEncoding(),
                 statement,
                 parser);
     if (item && !(item->results.isEmpty())) {
@@ -325,7 +326,7 @@ PSearchResultTreeItem CppRefacter::findOccurenceInFile(
             return parentItem;
         }
     }
-    editor.setSyntaxer(syntaxerManager.getSyntaxer(QSynedit::ProgrammingLanguage::CPP));
+    editor.setSyntaxer(SyntaxerManager::getSyntaxer(QSynedit::ProgrammingLanguage::CPP));
     int posY = 0;
     while (posY < editor.lineCount()) {
         QString line = editor.document()->getLine(posY);
@@ -376,7 +377,7 @@ void CppRefacter::renameSymbolInFile(const QString &filename, const PStatement &
     QStringList buffer;
     Editor * oldEditor=mMainWindow->editorManager()->getOpenedEditor(filename);
     if (oldEditor){
-        QSynedit::PSyntaxer syntaxer = syntaxerManager.getSyntaxer(QSynedit::ProgrammingLanguage::CPP);
+        QSynedit::PSyntaxer syntaxer = SyntaxerManager::getSyntaxer(QSynedit::ProgrammingLanguage::CPP);
         int posY = 0;
         oldEditor->clearSelection();
         oldEditor->beginEditing();
@@ -414,7 +415,7 @@ void CppRefacter::renameSymbolInFile(const QString &filename, const PStatement &
     } else {
         Editor editor(nullptr);
         QByteArray encoding;
-        editor.setSyntaxer(syntaxerManager.getSyntaxer(QSynedit::ProgrammingLanguage::CPP));
+        editor.setSyntaxer(SyntaxerManager::getSyntaxer(QSynedit::ProgrammingLanguage::CPP));
         try {
             editor.loadFromFile(filename,ENCODING_AUTO_DETECT,encoding);
         } catch(FileError e) {
@@ -457,8 +458,7 @@ void CppRefacter::renameSymbolInFile(const QString &filename, const PStatement &
         QByteArray realEncoding;
         QFile file(filename);
         try {
-            editor.document()->saveToFile(file,ENCODING_AUTO_DETECT,
-                                       pSettings->editor().defaultEncoding(),
+            editor.document()->saveToFile(file,editor.editorEncoding(),
                                        realEncoding);
         } catch(FileError e) {
             QMessageBox::critical(mMainWindow,
