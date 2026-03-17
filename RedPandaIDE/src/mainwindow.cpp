@@ -1243,25 +1243,19 @@ void MainWindow::removeActiveBreakpoints()
 {
     for (int i=0;i<mEditorManager->pageCount();i++) {
         Editor* e= (*mEditorManager)[i];
-        e->removeBreakpointFocus();
+        e->removeActiveBreakpoint();
     }
 }
 
-void MainWindow::setActiveBreakpoint(QString fileName, int line, bool setFocus)
+void MainWindow::setActiveBreakpoint(QString fileName, int line)
 {
     removeActiveBreakpoints();
     // Then active the current line in the current file
     Editor *e = openFile(fileName, false);
     if (e!=nullptr) {
-        e->setActiveBreakpointFocus(line,setFocus);
-        if (setFocus)
-            mEditorManager->activeEditorAndSetCaret(e,QSynedit::CharPos{0,line});
-        else
-            e->setCaretPosition(QSynedit::CharPos{0,line});
-
-        if (setFocus) {
-            activateWindow();
-        }
+        e->setActiveBreakpoint(line);
+        mEditorManager->activeEditorAndSetCaret(e,QSynedit::CharPos{0,line});
+        activateWindow();
     } else {
         showHideMessagesTab(ui->tabDebug, true);
         ui->debugViews->setCurrentWidget(ui->tabStackTrace);
@@ -5783,15 +5777,15 @@ void MainWindow::onFileRenamedInFileSystemModel(const QString &path, const QStri
     QString oldFile = folder.absoluteFilePath(oldName);
     QString newFile = folder.absoluteFilePath(newName);
 
-    if (QFileInfo::exists(newFile)) {
-        QMessageBox::critical(this, tr("Rename Error"),
-                              tr("File %1 already exist!").arg(newFile));
-        return;
-    }
+//    if (QFileInfo::exists(newFile)) {
+//        QMessageBox::critical(this, tr("Rename Error"),
+//                              tr("File %1 already exist!").arg(newFile));
+//        return;
+//    }
     Editor *e = mEditorManager->getOpenedEditor(newFile);
     if (e) {
-        QMessageBox::critical(this, tr("Rename Error"),
-                              tr("File %1 already openned!").arg(newFile));
+//        QMessageBox::critical(this, tr("Rename Error"),
+//                              tr("File %1 already openned!").arg(newFile));
         mEditorManager->activeEditor(e,true);
         return;
     }

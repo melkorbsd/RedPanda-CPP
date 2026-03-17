@@ -410,7 +410,6 @@ public:
     bool findLineTextBySeq(size_t lineSeq, QString& text) const;
 
     const std::shared_ptr<const Document> document() const;
-    bool empty();
 
     void loadFromFile(const QString& filename, const QByteArray& encoding, QByteArray& realEncoding);
     void setContent(const QString& text);
@@ -489,7 +488,7 @@ public:
     const QColor &backgroundColor() const;
     void setBackgroundColor(const QColor &newBackgroundColor);
 
-    bool isEmpty();
+    bool empty() const;
 
     int mouseSelectionScrollSpeed() const;
     void setMouseSelectionScrollSpeed(int newMouseSelectionScrollSpeed);
@@ -511,7 +510,6 @@ signals:
     void changed();
     void gutterClicked(Qt::MouseButton button, int x, int y, int line);
     void statusChanged(QSynedit::StatusChanges changes);
-    void fontChanged();
     void tabSizeChanged();
 #ifdef QSYNEDIT_TEST
     void foldsRescaned(); // for test
@@ -630,7 +628,7 @@ private:
     void calcEffectiveFromToLine(const CharPos &beginPos, const CharPos &endPos, int &fromLine, int &toLine);
 
     int calcIndentSpaces(int line, const QString& lineText, bool addIndent);
-
+    bool shouldRecalcIndent(int line);
     void processGutterClick(QMouseEvent* event);
 
     void clearUndo();

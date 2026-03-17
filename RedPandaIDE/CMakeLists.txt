@@ -50,6 +50,7 @@ target_qt_plain_cpp(RedPandaIDE
     src/utils/parsearg
     src/utils/parser
     src/utils/parsemacros
+    src/utils/pe
     src/utils/terminal
     src/utils/ui
     )
@@ -207,10 +208,10 @@ target_link_libraries(RedPandaIDE PRIVATE
     qsynedit
     redpanda_qt_utils)
 
-target_link_options(RedPandaIDE PRIVATE
-    $<$<CONFIG:Release>:-s -static>
-    $<$<CONFIG:MinSizeRel>:-s -static>
-)
+#target_link_options(RedPandaIDE PRIVATE
+#    $<$<CONFIG:Release>:-s -static>
+#    $<$<CONFIG:MinSizeRel>:-s -static>
+#)
 
 #####################
 # test-editor       #
@@ -320,6 +321,7 @@ target_qt_plain_cpp(test-cppparser
 target_moc_classes(test-cppparser
     #test
     test/test_cppparser
+    test/test_cpppreprocessor
 )
 target_include_directories(test-cppparser PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR})
@@ -366,6 +368,7 @@ if(WIN32)
 
     target_link_libraries(RedPandaIDE PRIVATE
         advapi32
+        dbghelp
         psapi
         shlwapi
         user32)
