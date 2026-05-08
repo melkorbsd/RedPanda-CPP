@@ -646,8 +646,21 @@ QString CppPreprocessor::expandMacro(QString &text, const QString &word, int &i,
     } else if (define && (define->args!="")) {
         int oldI = i;
         //skip spaces;
-        while ((i<lenLine) && (text[i] == ' ' || text[i]=='\t'))
-            i++;
+        if (handleBuffer) {
+            while (true) {
+                while ((i<lenLine) && (text[i] == ' ' || text[i]=='\t'))
+                    i++;
+                if (i>=lenLine && mIndex+1<mBuffer.count()) {
+                    mIndex++;
+                    text += " "+mBuffer[mIndex];
+                    lenLine += mBuffer[mIndex].length()+1;
+                } else
+                    break;
+            }
+        } else {
+            while ((i<lenLine) && (text[i] == ' ' || text[i]=='\t'))
+                i++;
+        }
         int argStart=-1;
         int argEnd=-1;
         if ((i<lenLine) && (text[i]=='(')) {
