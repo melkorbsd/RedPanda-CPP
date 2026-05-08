@@ -337,7 +337,6 @@ void CppPreprocessor::handleInclude(const QString &tokens, bool fromNext)
     }
 
     QString s=tokens;
-    QSet<QString> usedMacros;
     if (!s.startsWith('<') && !s.startsWith('\"'))
         s = expandMacros(s);
 
